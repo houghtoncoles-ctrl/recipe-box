@@ -1,4 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+
+// ─────────────────────────────────────────────
+// FIREBASE SETUP
+// ─────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyD9SJxlwBX9_4533K_TbhaROc-4TJgkeCo",
+  authDomain: "recipe-box-3dd2f.firebaseapp.com",
+  projectId: "recipe-box-3dd2f",
+  storageBucket: "recipe-box-3dd2f.firebasestorage.app",
+  messagingSenderId: "307680572285",
+  appId: "1:307680572285:web:fb7216d221efc7968f9214"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
 // ─────────────────────────────────────────────
 // CONSTANTS
@@ -280,18 +296,20 @@ function injectCSS() {
 }
 
 // ─────────────────────────────────────────────
-// STORAGE HELPERS (localStorage for self-hosted)
+// STORAGE HELPERS (Firebase Firestore — shared across all devices)
 // ─────────────────────────────────────────────
 async function loadShared(key) {
   try {
-    const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : null;
+    const ref = doc(db, "recipebox", key);
+    const snap = await getDoc(ref);
+    return snap.exists() ? snap.data().value : null;
   } catch { return null; }
 }
 
 async function saveShared(key, data) {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    const ref = doc(db, "recipebox", key);
+    await setDoc(ref, { value: data, updatedAt: Date.now() });
     return true;
   } catch { return false; }
 }
@@ -302,7 +320,7 @@ async function saveShared(key, data) {
 
 function SyncBar({ status }) {
   const dot = status === "synced" ? "synced" : status === "syncing" ? "syncing" : "error";
-  const label = status === "synced" ? "Recipes saved" : status === "syncing" ? "Saving…" : "Could not save — check storage";
+  const label = status === "synced" ? "Synced across all devices" : status === "syncing" ? "Syncing…" : "Could not sync — check connection";
   return (
     <div className="rb-sync-bar">
       <span className={`rb-sync-dot ${dot}`} />
