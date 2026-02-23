@@ -302,16 +302,47 @@ async function loadShared(key) {
   try {
     const ref = doc(db, "recipebox", key);
     const snap = await getDoc(ref);
-    return snap.exists() ? snap.data().value : null;
-  } catch { return null; }
+    if (!snap.exists()) return null;
+    const d = snap.data();
+    // Handle both direct value and wrapped value formats
+    return d.value !== undefined ? d.value : d;
+  } catch (e) {
+    console.error("loadShared error:", e);
+    return null;
+  }
 }
 
 async function saveShared(key, data) {
   try {
     const ref = doc(db, "recipebox", key);
-    await setDoc(ref, { value: data, updatedAt: Date.now() });
+    // Strip imageData from recipes before saving to Firestore (too large)
+    // Store images in localStorage separately
+    let saveData = data;
+    if (data && data.recipes) {
+      const stripped = data.recipes.map(r => {
+        const { imageData, ...rest } = r;
+        if (imageData) {
+          try { localStorage.setItem("rb_img_" + r.id, imageData); } catch {}
+        }
+        return rest;
+      });
+      saveData = { ...data, recipes: stripped };
+    }
+    await setDoc(ref, { value: saveData, updatedAt: Date.now() });
     return true;
-  } catch { return false; }
+  } catch (e) {
+    console.error("saveShared error:", e);
+    return false;
+  }
+}
+
+function rehydrateImages(recipes) {
+  return recipes.map(r => {
+    try {
+      const img = localStorage.getItem("rb_img_" + r.id);
+      return img ? { ...r, imageData: img } : r;
+    } catch { return r; }
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -1022,7 +1053,7 @@ export default function App() {
       setSyncStatus("syncing");
       try {
         const data = await loadShared(STORAGE_KEY);
-        if (data?.recipes) setRecipes(data.recipes);
+        if (data?.recipes) setRecipes(rehydrateImages(data.recipes));
         const planData = await loadShared(PLAN_KEY);
         if (planData) setSavedPlan(planData);
         setSyncStatus("synced");
